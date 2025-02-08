@@ -15,7 +15,9 @@ const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const hotelRoutes = require('./routes/hotelRoutes');
 const bookingRoutes = require('./routes/bookingRoutes');
+const superAdminRoutes = require('./routes/superAdminRoutes');
 
+app.use("/api/super-admin", superAdminRoutes);
 app.use('/api/users', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/hotels', hotelRoutes);
