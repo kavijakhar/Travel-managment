@@ -1,15 +1,17 @@
 const express = require('express');
 const router = express.Router();
 
-// Define your route handlers
+const { getAllAdmins, createAdmin, updateAdmin, getAdminById, deleteAdmin } = require('../controllers/adminController');
+const { verifySuperAdmin } = require('../middleware/authMiddleware');
+
 router.get('/', (req, res) => {
-  res.send('Admin route');
+  res.send('Welcome to the Admin Routes');
 });
 
-// Additional admin-specific routes
-router.post('/create', (req, res) => {
-  res.send('Admin create route');
-});
+router.get('/admins', verifySuperAdmin, getAllAdmins);
+router.post('/create', verifySuperAdmin, createAdmin);
+router.put('/update/:adminId', verifySuperAdmin,updateAdmin);
+router.get('/getAdminById/:adminId', verifySuperAdmin, getAdminById);
+router.delete('/delete/:adminId', verifySuperAdmin, deleteAdmin);
 
-// Export the router instance
 module.exports = router;
