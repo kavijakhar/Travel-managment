@@ -1,3 +1,4 @@
+const { Resend } = require('resend');
 const Admin = require('../models/Admin');
 const bcrypt = require('bcryptjs');
 
@@ -11,13 +12,15 @@ const getAllAdmins = async (req, res) => {
     }
 };
 
+const resend = new Resend(process.env.RESEND_API_KEY); 
+
 const createAdmin = async (req, res) => {
     const { name, email, password, role } = req.body;
 
     if (!name || !email || !password || !role) {
         return res.status(400).json({ message: 'All fields are required' });
     }
-    // Check if the role is valid
+
     if (!['hotel_manager', 'travel_agent'].includes(role)) {
         return res.status(400).json({ message: 'Invalid role' });
     }
@@ -28,17 +31,13 @@ const createAdmin = async (req, res) => {
     }
 
     try {
-        // Check if the email already exists
         const existingAdmin = await Admin.findOne({ email });
         if (existingAdmin) {
             return res.status(400).json({ message: 'Admin with this email already exists' });
         }
 
-        // Hash the password before saving the new admin
         const hashedPassword = await bcrypt.hash(password, 10);
-        console.log("runn")
 
-        // Create a new admin
         const newAdmin = new Admin({
             name,
             email,
@@ -46,10 +45,26 @@ const createAdmin = async (req, res) => {
             role
         });
 
-        // Save the new admin to the database
         await newAdmin.save();
 
-        res.status(201).json({ message: 'Admin created successfully', admin: newAdmin });
+        // Send email with login credentials
+        await resend.emails.send({
+            from: 'travelmanagment.42web.ios', // Replace with your verified email
+            to: email,
+            subject: 'Your Admin Account Details',
+            html: `
+                <h3>Welcome, ${name}!</h3>
+                <p>Your admin account has been created successfully.</p>
+                <p><strong>Login URL:</strong> <a href="https://your-app.com/login">Login Here</a></p>
+                <p><strong>Email:</strong> ${email}</p>
+                <p><strong>Password:</strong> ${password}</p>
+                <p>Please change your password after logging in for security reasons.</p>
+                <br/>
+                <p>Best Regards,<br/>Your Company Name</p>
+            `
+        });
+
+        res.status(201).json({ message: 'Admin created successfully. Email sent.', admin: newAdmin });
     } catch (err) {
         res.status(500).json({ message: 'Error creating admin', error: err });
     }
