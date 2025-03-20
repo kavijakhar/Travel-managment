@@ -1,6 +1,7 @@
-const { Resend } = require('resend');
+const nodemailer = require("nodemailer");
 const Admin = require('../models/Admin');
 const bcrypt = require('bcryptjs');
+const jwt = require("jsonwebtoken");
 
 // Get all admins
 const getAllAdmins = async (req, res) => {
@@ -12,28 +13,45 @@ const getAllAdmins = async (req, res) => {
     }
 };
 
-const resend = new Resend(process.env.RESEND_API_KEY); 
+
+const transporter = nodemailer.createTransport({
+    host: "mail.antheminfotech.info",
+    port: 587,
+    secure: false,
+    auth: {
+        user: "hello@antheminfotech.info",
+        pass: "Anthem@nh22",
+    },
+    tls: {
+        ciphers: "TLSv1.2",
+        rejectUnauthorized: false,
+    },
+});
 
 const createAdmin = async (req, res) => {
     const { name, email, password, role } = req.body;
 
     if (!name || !email || !password || !role) {
-        return res.status(400).json({ message: 'All fields are required' });
+        return res.status(400).json({ message: "All fields are required" });
     }
 
-    if (!['hotel_manager', 'travel_agent'].includes(role)) {
-        return res.status(400).json({ message: 'Invalid role' });
+    if (!["hotel_manager", "travel_agent"].includes(role)) {
+        return res.status(400).json({ message: "Invalid role" });
     }
 
     const currentAdmin = req.admin;
-    if (currentAdmin.role !== 'super_admin') {
-        return res.status(403).json({ message: 'Access Denied, Only Super Admin can create an Admin' });
+    if (currentAdmin.role !== "super_admin") {
+        return res
+            .status(403)
+            .json({ message: "Access Denied, Only Super Admin can create an Admin" });
     }
 
     try {
         const existingAdmin = await Admin.findOne({ email });
         if (existingAdmin) {
-            return res.status(400).json({ message: 'Admin with this email already exists' });
+            return res
+                .status(400)
+                .json({ message: "Admin with this email already exists" });
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
@@ -42,31 +60,41 @@ const createAdmin = async (req, res) => {
             name,
             email,
             password: hashedPassword,
-            role
+            role,
         });
 
         await newAdmin.save();
 
-        // Send email with login credentials
-        await resend.emails.send({
-            from: 'travelmanagment.42web.ios', // Replace with your verified email
+        // Send email with login credentials using SMTP
+        const mailOptions = {
+            from: '"Your Company" <hello@antheminfotech.info>', // Replace with your verified sender email
             to: email,
-            subject: 'Your Admin Account Details',
+            subject: "Your Admin Account Details",
             html: `
-                <h3>Welcome, ${name}!</h3>
-                <p>Your admin account has been created successfully.</p>
-                <p><strong>Login URL:</strong> <a href="https://your-app.com/login">Login Here</a></p>
-                <p><strong>Email:</strong> ${email}</p>
-                <p><strong>Password:</strong> ${password}</p>
-                <p>Please change your password after logging in for security reasons.</p>
-                <br/>
-                <p>Best Regards,<br/>Your Company Name</p>
-            `
+            <h3>Welcome, ${name}!</h3>
+            <p>Your admin account has been created successfully.</p>
+            <p><strong>Login URL:</strong> <a href="https://your-app.com/login">Login Here</a></p>
+            <p><strong>Email:</strong> ${email}</p>
+            <p><strong>Password:</strong> ${password}</p>
+            <p>Please change your password after logging in for security reasons.</p>
+            <br/>
+            <p>Best Regards,<br/>Your Company Name</p>
+        `,
+        };
+
+        transporter.sendMail(mailOptions, (error, info) => {
+            if (error) {
+                console.log("Email sending error:", error);
+            } else {
+                console.log("Email sent: " + info.response);
+            }
         });
 
-        res.status(201).json({ message: 'Admin created successfully. Email sent.', admin: newAdmin });
+        res
+            .status(201)
+            .json({ message: "Admin created successfully. Email sent.", admin: newAdmin });
     } catch (err) {
-        res.status(500).json({ message: 'Error creating admin', error: err });
+        res.status(500).json({ message: "Error creating admin", error: err });
     }
 };
 
@@ -156,4 +184,47 @@ const deleteAdmin = async (req, res) => {
     }
 };
 
-module.exports = { getAllAdmins, createAdmin, updateAdmin, getAdminById , deleteAdmin };
+
+const loginAdmin = async (req, res) => {
+    const { email, password } = req.body;
+  
+    // Check if email and password are provided
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email and password are required' });
+    }
+  
+    try {
+      // Normalize email to lowercase for case-insensitive matching
+      const normalizedEmail = email.trim().toLowerCase();
+  
+      // Find the admin by normalized email
+      const admin = await Admin.findOne({ email: normalizedEmail });
+      
+      console.log('Admin fetched:', admin); // Debugging the result
+  
+      // If admin not found
+      if (!admin) {
+        return res.status(404).json({ message: 'Admin not found' });
+      }
+  
+      // Compare the password with the stored hash
+      const isPasswordValid = await bcrypt.compare(password, admin.password);
+  
+      if (!isPasswordValid) {
+        return res.status(401).json({ message: 'Invalid credentials' });
+      }
+  
+      // Generate JWT token
+      const payload = { id: admin._id, email: admin.email, role: admin.role };
+      const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });
+  
+      // Send the token to the client
+      res.status(200).json({ message: 'Login successful', token });
+    } catch (err) {
+      console.log('Error during login:', err); // Log error
+      res.status(500).json({ message: 'Error logging in', error: err.message });
+    }
+  };
+  
+
+module.exports = { getAllAdmins, createAdmin, updateAdmin, getAdminById, deleteAdmin, loginAdmin };
